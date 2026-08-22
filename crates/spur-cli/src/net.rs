@@ -96,6 +96,16 @@ pub enum NetCommand {
         #[arg(long, default_value = "spur0")]
         interface: String,
     },
+    /// Remove a peer from the running WireGuard interface by its public key (the counterpart to
+    /// add-peer; e.g. when a node leaves the mesh). Idempotent — removing an absent peer succeeds.
+    RemovePeer {
+        /// Peer's WireGuard public key
+        #[arg(long)]
+        key: String,
+        /// WireGuard interface name
+        #[arg(long, default_value = "spur0")]
+        interface: String,
+    },
     /// Apply a full-mesh peering from a membership file on the local node.
     ///
     /// Adds every other node as a direct peer with pod-CIDR-aware AllowedIPs,
@@ -172,6 +182,7 @@ pub async fn main_with_args(args: Vec<String>) -> Result<()> {
             endpoint.as_deref(),
             &interface,
         ),
+        NetCommand::RemovePeer { key, interface } => cmd_remove_peer(&key, &interface),
         NetCommand::Mesh {
             config,
             self_ip,
@@ -359,6 +370,13 @@ fn cmd_add_peer(
     Ok(())
 }
 
+fn cmd_remove_peer(key: &str, interface: &str) -> Result<()> {
+    wireguard::remove_peer(interface, key)?;
+    eprintln!("Peer removed from {}:", interface);
+    eprintln!("  Public key: {}", key);
+    Ok(())
+}
+
 fn cmd_mesh(
     config: &Path,
     self_ip: &str,
@@ -456,4 +474,26 @@ fn address_network(ip: &str, prefix_len: u8) -> Result<String> {
     let mask = !((1u32 << (32 - prefix_len)) - 1);
     let network = u32::from(addr) & mask;
     Ok(Ipv4Addr::from(network).to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_remove_peer_with_key_and_iface_default() {
+        let args = NetArgs::try_parse_from(["net", "remove-peer", "--key", "abc="]).unwrap();
+        match args.command {
+            NetCommand::RemovePeer { key, interface } => {
+                assert_eq!(key, "abc=");
+                assert_eq!(interface, "spur0");
+            }
+            _ => panic!("wrong command"),
+        }
+    }
+
+    #[test]
+    fn remove_peer_requires_key() {
+        assert!(NetArgs::try_parse_from(["net", "remove-peer"]).is_err());
+    }
 }

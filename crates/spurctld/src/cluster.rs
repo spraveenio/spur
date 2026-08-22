@@ -16534,6 +16534,7 @@ mod tests {
         });
         let net = crate::cluster_k8s::ClusterNetworking {
             mesh_cidr: "10.44.0.0/16".into(),
+            mesh_interface: "spur0".into(),
             pod_cidr: "10.42.0.0/16".into(),
             service_cidr: "10.43.0.0/16".into(),
             cni_mtu: 1450,
@@ -16580,6 +16581,7 @@ mod tests {
     fn provision_net_calico() -> crate::cluster_k8s::ClusterNetworking {
         crate::cluster_k8s::ClusterNetworking {
             mesh_cidr: "10.44.0.0/16".into(),
+            mesh_interface: "spur0".into(),
             pod_cidr: "10.42.0.0/16".into(),
             service_cidr: "10.43.0.0/16".into(),
             cni_mtu: 1450,
@@ -16839,6 +16841,7 @@ mod tests {
 
         let net = crate::cluster_k8s::ClusterNetworking {
             mesh_cidr: "10.44.0.0/16".into(),
+            mesh_interface: "spur0".into(),
             pod_cidr: "10.42.0.0/16".into(),
             service_cidr: "10.43.0.0/16".into(),
             cni_mtu: 1450,
@@ -16858,6 +16861,7 @@ mod tests {
     fn k0s_test_net() -> crate::cluster_k8s::ClusterNetworking {
         crate::cluster_k8s::ClusterNetworking {
             mesh_cidr: "10.44.0.0/16".into(),
+            mesh_interface: "spur0".into(),
             pod_cidr: "10.42.0.0/16".into(),
             service_cidr: "10.43.0.0/16".into(),
             cni_mtu: 1450,
@@ -16952,6 +16956,7 @@ mod tests {
         let cm = test_cluster(&dir).await;
         let net = crate::cluster_k8s::ClusterNetworking {
             mesh_cidr: "10.44.0.0/16".into(),
+            mesh_interface: "spur0".into(),
             pod_cidr: "10.42.0.0/16".into(),
             service_cidr: "10.43.0.0/16".into(),
             cni_mtu: 1450,
@@ -17130,6 +17135,7 @@ mod tests {
 
         let net = crate::cluster_k8s::ClusterNetworking {
             mesh_cidr: "10.44.0.0/16".into(),
+            mesh_interface: "spur0".into(),
             pod_cidr: "10.42.0.0/16".into(),
             service_cidr: "10.43.0.0/16".into(),
             cni_mtu: 1450,
@@ -17182,6 +17188,7 @@ mod tests {
 
         let net = crate::cluster_k8s::ClusterNetworking {
             mesh_cidr: "10.44.0.0/16".into(),
+            mesh_interface: "spur0".into(),
             pod_cidr: "10.42.0.0/16".into(),
             service_cidr: "10.43.0.0/16".into(),
             cni_mtu: 1450,
@@ -17307,6 +17314,7 @@ mod tests {
 
         let net = crate::cluster_k8s::ClusterNetworking {
             mesh_cidr: "10.44.0.0/16".into(),
+            mesh_interface: "spur0".into(),
             pod_cidr: "10.42.0.0/16".into(),
             service_cidr: "10.43.0.0/16".into(),
             cni_mtu: 1450,
@@ -17372,6 +17380,7 @@ mod tests {
 
         let net = crate::cluster_k8s::ClusterNetworking {
             mesh_cidr: "10.44.0.0/16".into(),
+            mesh_interface: "spur0".into(),
             pod_cidr: "10.42.0.0/16".into(),
             service_cidr: "10.43.0.0/16".into(),
             cni_mtu: 1450,
