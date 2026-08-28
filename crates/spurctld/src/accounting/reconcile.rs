@@ -240,6 +240,11 @@ async fn write_start(conn: &mut sqlx::PgConnection, job: &Job) -> anyhow::Result
             num_tasks: spec.num_tasks,
             cpus_per_task: spec.cpus_per_task,
             memory_mb,
+            gpus: job
+                .allocated_resources
+                .as_ref()
+                .map(|r| r.total_device_count("gpu") as u32)
+                .unwrap_or(0),
             submit_time: job.submit_time,
             start_time,
             reservation: spec.reservation.clone(),
@@ -611,6 +616,7 @@ mod tests {
                     num_tasks: job.spec.num_tasks,
                     cpus_per_task: job.spec.cpus_per_task,
                     memory_mb: 0,
+                    gpus: 0,
                     submit_time: job.submit_time,
                     start_time: job.start_time.unwrap(),
                     reservation: None,

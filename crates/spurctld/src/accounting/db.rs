@@ -145,6 +145,7 @@ CREATE INDEX IF NOT EXISTS idx_assoc_account ON associations(account);
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS exit_signal INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS derived_exit_code INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS reservation TEXT NOT NULL DEFAULT '';
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS gpus INTEGER NOT NULL DEFAULT 0;
 -- No FK to qos(name): a stale reference (QOS deleted after being set as a
 -- default) must degrade gracefully at read time, not be blocked here.
 ALTER TABLE associations ADD COLUMN IF NOT EXISTS default_qos TEXT;
@@ -217,6 +218,7 @@ pub struct JobStartRecord {
     pub num_tasks: u32,
     pub cpus_per_task: u32,
     pub memory_mb: u64,
+    pub gpus: u32,
     pub submit_time: DateTime<Utc>,
     pub start_time: DateTime<Utc>,
     pub reservation: Option<String>,
@@ -233,8 +235,8 @@ pub async fn record_job_start(conn: &mut PgConnection, rec: &JobStartRecord) -> 
     // job_id reuse after a Raft wipe means a conflict is a new, unrelated job.
     sqlx::query(
         r#"
-        INSERT INTO jobs (job_id, name, user_name, account, partition_name, qos, num_nodes, num_tasks, cpus_per_task, memory_mb, submit_time, start_time, state, reservation)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'RUNNING', $13)
+        INSERT INTO jobs (job_id, name, user_name, account, partition_name, qos, num_nodes, num_tasks, cpus_per_task, memory_mb, gpus, submit_time, start_time, state, reservation)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'RUNNING', $14)
         ON CONFLICT (job_id) DO UPDATE SET
             name = EXCLUDED.name,
             user_name = EXCLUDED.user_name,
@@ -245,6 +247,7 @@ pub async fn record_job_start(conn: &mut PgConnection, rec: &JobStartRecord) -> 
             num_tasks = EXCLUDED.num_tasks,
             cpus_per_task = EXCLUDED.cpus_per_task,
             memory_mb = EXCLUDED.memory_mb,
+            gpus = EXCLUDED.gpus,
             submit_time = EXCLUDED.submit_time,
             start_time = EXCLUDED.start_time,
             state = EXCLUDED.state,
@@ -264,6 +267,7 @@ pub async fn record_job_start(conn: &mut PgConnection, rec: &JobStartRecord) -> 
     .bind(rec.num_tasks as i32)
     .bind(rec.cpus_per_task as i32)
     .bind(rec.memory_mb as i64)
+    .bind(rec.gpus as i32)
     .bind(rec.submit_time)
     .bind(rec.start_time)
     .bind(rec.reservation.as_deref().unwrap_or_default())
@@ -273,7 +277,7 @@ pub async fn record_job_start(conn: &mut PgConnection, rec: &JobStartRecord) -> 
     // If end_time is already set, the end notification arrived first and skipped
     // usage computation (start_time was NULL at that point). Compute it now.
     let row = sqlx::query(
-        "SELECT user_name, account, start_time, num_tasks, cpus_per_task, end_time FROM jobs WHERE job_id = $1",
+        "SELECT user_name, account, start_time, num_tasks, cpus_per_task, gpus, end_time FROM jobs WHERE job_id = $1",
     )
     .bind(rec.job_id as i32)
     .fetch_one(&mut *conn)
@@ -317,7 +321,7 @@ pub async fn record_job_end(
             preempted_by = $7,
             preempt_mode = $8,
             preempt_qos = $9
-        RETURNING user_name, account, start_time, num_tasks, cpus_per_task
+        RETURNING user_name, account, start_time, num_tasks, cpus_per_task, gpus
         "#,
     )
     .bind(job_id)
@@ -393,9 +397,11 @@ async fn update_usage(
     };
     let num_tasks: i32 = row.get("num_tasks");
     let cpus_per_task: i32 = row.get("cpus_per_task");
+    let gpus: i32 = row.get("gpus");
 
     let duration_secs = (end_time - start_time).num_seconds().max(0);
     let cpu_seconds = duration_secs * (num_tasks as i64) * (cpus_per_task as i64);
+    let gpu_seconds = duration_secs * (gpus as i64);
 
     // Truncate to hourly period for aggregation
     let period_start = start_time
@@ -407,10 +413,11 @@ async fn update_usage(
 
     sqlx::query(
         r#"
-        INSERT INTO usage (user_name, account, period_start, period_end, cpu_seconds, job_count)
-        VALUES ($1, $2, $3, $4, $5, 1)
+        INSERT INTO usage (user_name, account, period_start, period_end, cpu_seconds, gpu_seconds, job_count)
+        VALUES ($1, $2, $3, $4, $5, $6, 1)
         ON CONFLICT (user_name, account, period_start) DO UPDATE SET
             cpu_seconds = usage.cpu_seconds + $5,
+            gpu_seconds = usage.gpu_seconds + $6,
             job_count = usage.job_count + 1
         "#,
     )
@@ -419,6 +426,7 @@ async fn update_usage(
     .bind(period_start)
     .bind(period_end)
     .bind(cpu_seconds)
+    .bind(gpu_seconds)
     .execute(&mut *conn)
     .await?;
 
@@ -1498,6 +1506,7 @@ mod job_history_tests {
                 num_tasks: num_tasks as u32,
                 cpus_per_task: cpus_per_task as u32,
                 memory_mb: memory_mb as u64,
+                gpus: 0,
                 submit_time,
                 start_time,
                 reservation: Some(reservation.to_string()),

@@ -1609,6 +1609,7 @@ impl ClusterManager {
                 num_tasks: spec_for_notify.num_tasks,
                 cpus_per_task: spec_for_notify.cpus_per_task,
                 memory_mb: resources.memory_mb,
+                gpus: resources.total_device_count("gpu") as u32,
                 submit_time: submit_time_for_notify,
                 start_time: Utc::now(),
                 reservation: spec_for_notify.reservation.clone(),

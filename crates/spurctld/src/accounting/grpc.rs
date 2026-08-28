@@ -145,11 +145,18 @@ impl SlurmAccounting for AccountingService {
             .map(|t| DateTime::from_timestamp(t.seconds, t.nanos as u32).unwrap_or_default())
             .unwrap_or(start_time);
 
-        let (memory_mb, cpus) = req
+        let (memory_mb, cpus, gpus) = req
             .resources
             .as_ref()
-            .map(|r| (r.memory_mb, r.cpus))
-            .unwrap_or((0, 1));
+            .map(|r| {
+                let gpu_count = r
+                    .devices
+                    .get("gpu")
+                    .map(|d| d.devices.iter().map(|dev| dev.count as u32).sum::<u32>())
+                    .unwrap_or(0);
+                (r.memory_mb, r.cpus, gpu_count)
+            })
+            .unwrap_or((0, 1, 0));
 
         let mut conn = pool
             .acquire()
@@ -168,6 +175,7 @@ impl SlurmAccounting for AccountingService {
                 num_tasks: cpus,
                 cpus_per_task: 1,
                 memory_mb,
+                gpus,
                 submit_time,
                 start_time,
                 reservation: Some(req.reservation),
