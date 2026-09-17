@@ -59,10 +59,16 @@ into `KfdGpuNode` (`node_id`, `render_minor`, `unique_id`, `location_id`;
 `crates/spur-devices/src/cdi/discovery.rs:50-63`) and then discards it when
 collapsing to the positional id. Stop discarding it:
 
-- Carry a **stable identity** on `GpuResource`. Use the KFD `render_minor` (the
-  durable key that maps to `/dev/dri/renderD*`, repopulated correctly on a
-  partition switch). BDF is unsuitable: in CPX the same PCI device presents as N
-  logical devices with the BDF potentially unchanged.
+- Carry a **stable identity** on `GpuResource`. Use the KFD `render_minor` — the
+  per-logical-device key that maps to `/dev/dri/renderD*`. Within a partition mode
+  it is unique per schedulable unit; in CPX each of the N partitions is its own KFD
+  topology node with its own `render_minor`. BDF is unsuitable: in CPX all N
+  logical devices under one physical GPU share the same PCI BDF (confirmed in the
+  AMD k8s-device-plugin, which derives `devID` from `location_id` and relies on
+  that alias to copy partition metadata from the physical GPU to its XCP
+  partitions — `internal/pkg/amdgpu/amdgpu.go`). `render_minor` is already read
+  into `KfdGpuNode` (`crates/spur-devices/src/cdi/discovery.rs:53`) and discarded;
+  stop discarding it.
 - Additive proto field `GpuResource.stable_id` (new tag) and matching
   `#[serde(default)]` Rust field. `device_id` is unchanged — it stays the
   positional visible index for injection only.
@@ -72,9 +78,12 @@ collapsing to the positional id. Stop discarding it:
 
 - Add `ResourceSet.generation` (additive, new tag; `#[serde(default)]`). `spurd`
   bumps it on every topology rebuild. An allocation records the generation it was
-  made under; the controller rejects a dispatch whose generation is stale. This
-  catches a repartition that *reuses* a `device_id` value for a physically
-  different logical device — the id still "exists" but means something else.
+  made under; the controller rejects a dispatch whose generation is stale. This is
+  needed because `render_minor` values themselves **reuse** across a mode switch
+  (`renderD128` exists in both SPX and CPX but names different logical devices), so
+  a repartition can present a `stable_id` that still "exists" yet means something
+  else. The generation makes `stable_id` unambiguous across a rebuild: identity +
+  generation together are airtight where either alone is not.
 
 Upgrade compatibility: no field renamed/removed/retyped; no WAL variant changed.
 A new controller replaying old Raft entries sees `generation`/`stable_id` default
